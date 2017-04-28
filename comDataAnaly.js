@@ -15,6 +15,12 @@ const settings = require("./settings");
 const Promise = require("promise");
 const moment = require("moment");
 /**
+ * 打印异常堆栈
+ */
+process.on('uncaughtException', function(err) {
+    console.log(err.stack);
+});
+/**
  * 组件数据处理类;执行的入口
  */
 class ComDataDeal extends events.EventEmitter{
@@ -164,7 +170,7 @@ class ReadDB {
      */
     _findConditionResult(filterCondition,conn){
         let sql = filterCondition.replace(new RegExp("\\$\\{time\\}","g"),moment().format('YYYY-MM-DD'))
-            .replace(new RegExp("\\$\\{preTime\\}","g"),moment().substract('1',"days").format('YYYY-MM-DD'))
+            .replace(new RegExp("\\$\\{preTime\\}","g"),moment().subtract('1',"days").format('YYYY-MM-DD'))
             .replace(new RegExp("\\$\\{nextTime\\}","g"),moment().add('1',"days").format('YYYY-MM-DD'));
         return new Promise(function(fullfile,reject){
             //开始根据具体的sql进行执行操作；
@@ -237,6 +243,7 @@ class WriteDB {
     constructor(cp,em){
         this.connPool = cp;
         this.eventEmmiter = em;
+        this.runNum = 0;
         this._bindEvent();
     }
 
@@ -263,13 +270,14 @@ class WriteDB {
         //统计表
         let statisTable = runParam.statisTable;
 
+        let totalSize = result.length;
         //真正处理数据;
         for(let i in result){
             let obj = result[i];
             let val ;
             //obj中知会含有两个参数;如果含有多个参数表明存在问题
             for(let k in obj){
-                if(k == type){
+                if(k == statisLatitude){
                     //表明该属性为具体统计类型
                     continue;
                 }
@@ -278,8 +286,7 @@ class WriteDB {
             }
             let type = obj[statisLatitude];//字段类型
             //开启写入数据库操作
-            this._writeDB(val,type,statisTable,statisLatitude);
-
+            this._writeDB(val,type,statisTable,statisLatitude,runParam.id,totalSize);
         }
     }
 
@@ -311,16 +318,24 @@ class WriteDB {
      * @param statisLatitude 统计列
      * @private
      */
-    _writeDB(val,type,statisTable,statisLatitude){
-        let sql = "insert into "+statisTable+"("+statisLatitude+",statisCount) values(?,?)";
+    _writeDB(val,type,statisTable,statisLatitude,tagId,total){
+        let sql = "insert into "+statisTable+"("+statisLatitude+",statisCount,tagId,time) values(?,?,?,?)";
+        let self = this;
         this._getConn().then(function(conn){
             //开始执行真正的入库操作;
-            conn.query(sql,[type,val],function(err,result){
+            conn.query(sql,[type,val,tagId,moment().format('YYYY-MM-DD')],function(err,result){
                 //执行的结果。如果失败了就直接设定出来;
                 if(err){
                     console.error("插入数据出现了错误。。->%s",err);
                 }
+                self.runNum ++;
+                console.log("runNum->%s,total->%s",self.runNum,total);
+                if(self.runNum >= total){
+                    process.exit(1);
+                }
             });
+            //全部执行完成后进行把进程kill掉。
+
         },function(err){
             console.error("获取数据库连接出现问题了->%s",err);
         });
