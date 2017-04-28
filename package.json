@@ -1,0 +1,17 @@
+{
+  "name": "comp_data_analy",
+  "version": "1.0.1",
+  "description": "组件数据分析项目",
+  "main": "comDataAnaly.js",
+  "scripts": {
+    "run": "node comDataAnaly.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "liyangli",
+  "license": "ISC",
+  "dependencies": {
+    "moment": "^2.18.1",
+    "mysql": "^2.13.0",
+    "promise": "^7.1.1"
+  }
+}
