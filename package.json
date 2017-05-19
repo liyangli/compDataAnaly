@@ -2,16 +2,32 @@
   "name": "comp_data_analy",
   "version": "1.0.1",
   "description": "组件数据分析项目",
-  "main": "comDataAnaly.js",
   "scripts": {
-    "run": "node comDataAnaly.js",
+    "run": "nw .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "liyangli",
   "license": "ISC",
   "dependencies": {
     "moment": "^2.18.1",
-    "mysql": "^2.13.0",
-    "promise": "^7.1.1"
+    "pm2": "^2.4.6"
+  },
+  "main": "index.html",
+  "window": {
+    "title": "项目管理",
+    "toolbar": true,
+    "frame": true,
+    "show": true,
+    "width": 1000,
+    "height": 500,
+    /*"min_width":1000,
+    "min_height": 500,*/
+    /*"max_width":1000,
+    "max_height": 700,*/
+    "resizable": true,
+    "positoin": "center"
+  },
+  "webkit": {
+    "plugin": true
   }
 }
