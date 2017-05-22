@@ -20,10 +20,6 @@
     "show": true,
     "width": 1000,
     "height": 500,
-    /*"min_width":1000,
-    "min_height": 500,*/
-    /*"max_width":1000,
-    "max_height": 700,*/
     "resizable": true,
     "positoin": "center"
   },

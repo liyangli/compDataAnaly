@@ -6,12 +6,12 @@
  */
 "use strict";
 
-
+const EventEmmit = require('events');
+const God = require('./back/god.js');
 var Agent = function(){
     //对应执行的方式;
 
-    const EventEmmit = require('events');
-    const God = require('./back/god.js');
+
     this.ev = new EventEmmit();
     this.god = new  God(this.ev);
     /*try {
@@ -30,6 +30,7 @@ Agent.prototype = {
     findList: function(vm){
         this.god.findList();
         this.ev.on("findListFinish",function(err,result){
+            this.ev.removeAllListeners("findListFinish");
             if(err){
                 console.error(err);
                 return;
@@ -38,7 +39,7 @@ Agent.prototype = {
             if(!result){
                 console.info("数据不存在");
             }
-            vm.list = JSON.parse(result);
+            vm.list = result;
         });
     },
     /**
@@ -47,6 +48,44 @@ Agent.prototype = {
      */
     addOrModify: function(vm){
         
+    },
+    /**
+     * 开启对应保存动作。
+     * 操作步骤为:
+     * 1、进行对应文件操作
+     * 2、直接调用god类进行操作
+     * 
+     * 返回promise对象
+     * @param obj
+     */
+    doSave: function(obj,vm){
+        this.god.doSave(obj);
+        var self = this;
+        this.ev.on("doSaveFinish",function(err,result){
+            this.ev.removeAllListeners("doSaveFinish");
+            if(!err){
+                //表明能够正常保存了。需要进行同步进行处理了
+                self.findList(vm);
+                alert("保存成功!");
+            }else{
+                throw err;
+            }
+        });
+    },
+    /**
+     * 删除对应缓存数据
+     * @param name
+     */
+    delCache: function(name){
+        this.god.delCache(name);
+        this.ev.on("delCacheFinish",(err,result)=>{
+           if(err){
+               alert(err);
+               return;
+           }else{
+               alert("删除成功");
+           } 
+        });
     }
 };
 

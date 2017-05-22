@@ -15,6 +15,7 @@
 "use strict";
 const pm2 = require("pm2");
 const fs = require("fs");
+const moment = require('moment');
 
 class God{
     constructor(ev){
@@ -23,14 +24,51 @@ class God{
         this.attrs = {
             START: "start",
             STOP: "stop",
+            DELETE: "delete",
             RESTART: "restart",
             DISCONNECT: "disconnect",
             LIST: "list",
             DESCRIBE: "describe"
         };
+        this._init();
         this._pm2EventBind();
+        this.sysCache = [];
+        this._eventBind();
     }
 
+
+    /**
+     * 初始化对象是对应属性处理;
+     * @private
+     */
+    _init(){
+        //异步方式进行读取配置文件
+        const self = this;
+        fs.readFile(this.filePath,'UTF-8',function(err,data){
+            //查出数据直接放到对象中作为缓存记录起来;方便下次直接操作
+            if(data){
+                self.sysCache = JSON.parse(data);
+            }
+        });
+    }
+
+    /**
+     * 事件绑定
+     * @private
+     */
+    _eventBind(){
+        const self = this;
+        /**
+         * 自动同步缓存到磁盘上
+         */
+        this.ev.on('autoSaveDisk',()=>{
+            const self = this;
+            fs.writeFile(this.filePath,JSON.stringify(self.sysCache),function(err){
+                //写入成功;
+                self.ev.emit("autoSaveDiskFinish",err);
+            });
+        });
+    }
     /**
      * pm2相关事件绑定
      * @private
@@ -46,9 +84,9 @@ class God{
            for(let i in self.attrs){
                let attr = self.attrs[i];
                self.ev.on(attr,function(process){
-
+                   console.log("process->"+process);
                    const callback = function(err,result){
-                       //对应回调方法;
+
                        self.ev.emit(attr+"Finish",err,result);
                    };
 
@@ -68,29 +106,101 @@ class God{
     /**
      * 获取所有的设置的项目信息;
      * 主要处理步骤:
-     * 1、获取统计配置文件中相关数据;
+     * 1、获取对应缓存数据。
+     * 2、根据缓存数据进行获取对应pm2管理实际相关数据的大小;
      */
     findList(){
         const self = this;
-        //异步方式进行读取配置文件
-        fs.readFile(this.filePath,'UTF-8',function(err,data){
-            //需要把数据给抛出来;
-            self.ev.emit("findListFinish",err,data);
+
+        this.ev.emit(this.attrs.LIST);
+        this.ev.on(this.attrs.LIST+"Finish",(err,result)=>{
+           //表明成功了。需要进行组合一下。通过result作为基础然后进行遍历设定
+            this.ev.removeAllListeners(this.attrs.LIST+"Finish");
+            const runObjs = [];
+            if(!err && result.length> 0){
+                for(let i in result){
+                    let runObj = result[i];
+                    const obj = {
+                        name: runObj.name,
+                        time: "",
+                        status: runObj.pm2_env.status,
+                        cpu: runObj.monit.cpu,
+                        mem: runObj.monit.memory,
+                        fileName: '',
+                        fileSize: ''
+                    };
+                    //含有状态内存、cpu进程名称。需要根据名称进行匹配缓存中相关数据
+                    for(let sysObj of this.sysCache){
+                        if(runObj.name == sysObj.name){
+                            obj.time = sysObj.time;
+                            obj.fileName = sysObj.filePath;
+                            obj.fileSize = sysObj.fileSize;
+                            break;
+                        }
+                    }
+
+                    runObjs.push(obj);
+                }
+            }
+
+            self.ev.emit("findListFinish",err,runObjs);
         });
-        
+
     }
 
     /**
-     * 保存和修改对应数据
-     * @param saveObj 保存的对象。每次都是批量进行操作
+     * 开启对应新的任务;
+     * @param obj 具体开启的任务对象格式为{name: '',filePath: ''}
      */
-    saveModifyData(saveObj){
-        const self = this;
-        fs.writeFile(this.filePath,JSON.stringify(saveObj),function(err){
-            //写入成功;
-            self.ev.emit("saveModifyDataFinish",err);
+    doSave(obj){
+
+        this.ev.emit(this.attrs.START,{
+            name: obj.name,
+            script: obj.filePath,
+            output: obj.name+"-out.log",
+            logDateFormat: 'YYYY-MM-DD HH:mm:ss'
         });
+        this.ev.on(this.attrs.START+"Finish",(err,result)=>{
+            this.ev.removeAllListeners(this.attrs.START+"Finish")
+            this.ev.emit("doSaveFinish",err,result);
+        });
+        //获取对应文件大小。设定创建时间
+        obj.time = moment().format('YYYY-MM-DD HH:mm:ss');
+        //读取文件获取对一个文件大小
+        var states = fs.statSync(obj.filePath);
+        obj.fileSize = states.size;
+
+        //需要把这个数据存放到磁盘空间上
+        this.sysCache.push(obj);
+        //需要通知对应进行同步实例化到磁盘上;
+        this.ev.emit("autoSaveDisk");
+
     }
+
+    /**
+     * 删除对应缓存数据
+     * @param name
+     */
+    delCache(name){
+        for(var i in this.sysCache){
+            var sysObj = this.sysCache[i];
+            if(sysObj.name == name){
+                this.sysCache.slice(i,0);
+                break;
+            }
+        }
+        //需要通知进行同步数据
+        this.ev.emit("autoSaveDisk");
+        //需要进行通知对应pm2进行移除掉
+        this.ev.emit(this.attrs.DELETE,name);
+        this.ev.on(this.attrs.DELETE+"Finish",(err,result)=>{
+            this.ev.removeAllListeners(this.attrs.DELETE+"Finish")
+            this.ev.emit("delCache",err,result);
+        });
+
+    }
+
+
 
     /**
      * 获取指定进程的的实时指标数据
@@ -100,6 +210,7 @@ class God{
         const self = this;
         self.ev.emit(self.attrs.LIST);
         self.ev.on(self.attrs.LIST+"Finish",(err,result)=>{
+            self.ev.removeAllListeners(self.attrs.LIST+"Finish");
            if(err){
                console.error(err);
                return;

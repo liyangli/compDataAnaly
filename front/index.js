@@ -5,7 +5,7 @@
  * date: 17/5/19 下午1:43 .
  */
 
-(function(){
+(function(layer){
     "use strict";
 
 
@@ -50,37 +50,73 @@
         '</div>',
         data: function(){
             return {
-                list: [{
-                    name: 'demo',
-                    time: '2017-01-12 12:12:12',
-                    status: 1,
-                    cpu: '12%',
-                    mem: '124M',
-                    fileName: 'demo.js',
-                    fileSize: '12kp'
-                }],
-                allBoxFlag: false
+                list: [],
+                allBoxFlag: false,
+                agent: new Agent()
             }
         },
         created: function(){
             //一开始加载就需要从后台后去所有的数据
-            var agent = new Agent();
-            agent.findList(this);
+            var self = this;
+            setInterval(function(){
+                this.agent.findList(self);
+            },1000);
+            
         },
         methods: {
            add: function(){
-               this.list.push({
-                   name: 'demo',
-                   time: new Date(),
-                   status: 1,
-                   cpu: '12%',
-                   mem: '124M',
-                   fileName: 'demo.js',
-                   fileSize: '12kp'
+               var self = this;
+               //弹出对应也添加页面。需要进行选择具体的文件
+               layer.open({
+                   type: 1,
+                   shade: false,
+                   title: "新增",
+                   content: $('#sysAdd'), //捕获的元素
+                   cancel: function (index) {
+                       layer.close(index);
+                   },
+                   area: ["80%", "80%"],
+                   btn: ["确定", "取消"],
+                   yes: function (index, layero) {
+                       //表明对应点击的确定按钮 
+                       self.doSave({name: $("#name").val(),filePath: $("#filePath").val()});
+                       layero.close();
+                   }
                });
+               
+               
+               
            },
-           del: function(){
-               this.list.pop();
+           doSave: function(obj){
+             //对应进行保存操作,直接交给对应代理工具进行处理
+               var self = this;
+             this.agent.doSave(obj,self);
+               
+           },
+            /**
+             * 删除主要分为3部分
+             * 步骤:
+             * 1、删除页面上展示即缓存中数据
+             * 2、根据缓存数据进行同步数据文件;
+             * 3、pm2管理中进行移除掉
+             * @param name
+             */
+           del: function(name){
+
+                if(window.confirm("确定要移除该程序?")){
+                    //表明开始开启删除动作
+                    for(var i in this.list){
+                        var sysObj = this.list[i];
+                        if(sysObj.name == name){
+                            this.list.splice(i, 1);
+                            break;
+                        }
+                    }
+                    //删除缓存中对应数据。以及同步数据库文件
+                    this.agent.delCache(name);
+
+                }
+
            },
             checkAll: function(){
                 var allBoxFlag = this.allBoxFlag;
@@ -102,4 +138,4 @@
         }
     });
     
-})();
+})(layer);
